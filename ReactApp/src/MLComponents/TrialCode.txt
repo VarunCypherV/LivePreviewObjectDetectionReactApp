@@ -11,166 +11,80 @@ const ObjectDetection = () => {
       // Load your custom TensorFlow.js model
       console.log('Custom model going to load.');
       const model = await tf.loadLayersModel('https://raw.githubusercontent.com/VarunCypherV/ObjectDetectionReactApp/main/model.json');
-      console.log(model);
-    
       console.log('Custom model loaded.');
 
-      setInterval(async () => {
-        if (typeof webcamRef.current !== "undefined" && webcamRef.current && webcamRef.current.video.readyState === 4) {
-          const video = webcamRef.current.video;
-          const { videoWidth, videoHeight } = video;
-          webcamRef.current.video.width = videoWidth;
-          webcamRef.current.video.height = videoHeight;
-          canvasRef.current.width = videoWidth;
-          canvasRef.current.height = videoHeight;
+      // Create a function for real-time object detection
+      const detectObjects = async () => {
+        const webcam = webcamRef.current;
 
-          const img = tf.browser.fromPixels(video);
-          const input = tf.image.resizeBilinear(img, [256, 256]);
-          const expanded = input.expandDims(0);
-          const predictions = await model.predict(expanded);
-
-          // Get the canvas context
-          const ctx = canvasRef.current.getContext('2d');
-          ctx.clearRect(0, 0, videoWidth, videoHeight);
-
-          // Process predictions and draw bounding boxes on canvas
-          if(!predictions){
-            predictions.forEach((prediction) => {
-              const [x, y, width, height] = prediction.arraySync();
-              const label = prediction.class;
-              const score = prediction.score;
-  
-              // Draw a red bounding box
-              ctx.strokeStyle = 'red';
-              ctx.lineWidth = 2;
-              ctx.fillStyle = 'red';
-              ctx.beginPath();
-              ctx.rect(x * videoWidth, y * videoHeight, width * videoWidth, height * videoHeight);
-              ctx.stroke();
-  
-              // Display label and confidence score
-              ctx.fillStyle = 'red';
-              ctx.fillText(`${label} (${Math.round(score * 100)}%)`, x * videoWidth, y * videoHeight - 5);
-            });
-  
-            tf.dispose([img, input, expanded, predictions]);
-          }
-          
+        // Ensure the webcam is initialized
+        if (!webcam || !webcam.video) {
+          requestAnimationFrame(detectObjects);
+          return;
         }
-      }, 100);
-    };
 
-    runObjectDetection();
-  }, []);
+        const videoElement = webcam.video;
 
-  return (
-    <div>
-      <Webcam
-          ref={webcamRef}
-          style={{
-            position: "absolute",
-            left: 0,
-            right: 0,
-            margin: "auto",
-            textAlign: "center",
-            zIndex: 9,
-            height: 800,
-            width: 800,
-          }}
-        />
-        <canvas
-          ref={canvasRef}
-          style={{
-            position: "absolute",
-            left: 0,
-            right: 0,
-            margin: "auto",
-            textAlign: "center",
-            zIndex: 9,
-            height: 800,
-            width: 800,
-          }}
-        />
-
-    </div>
-  );
-};
-
-export default ObjectDetection;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-import React, { useRef, useEffect } from 'react';
-import * as tf from '@tensorflow/tfjs';
-import Webcam from 'react-webcam';
-
-const ObjectDetection = () => {
-  const webcamRef = useRef(null);
-  const canvasRef = useRef(null);
-
-  useEffect(() => {
-    const runObjectDetection = async () => {
-      // Load your custom TensorFlow.js model
-      console.log('Custom model going to load.');
-      const model = await tf.loadLayersModel('./model1/model.json');
-    
-    
-      console.log('Custom model loaded.');
-
-      setInterval(async () => {
-        if (webcamRef.current && webcamRef.current.video.readyState === 4) {
-          const video = webcamRef.current.video;
-          const { videoWidth, videoHeight } = video;
-          webcamRef.current.video.width = videoWidth;
-          webcamRef.current.video.height = videoHeight;
-
-          const img = tf.browser.fromPixels(video);
-          const input = tf.image.resizeBilinear(img, [640, 480]);
-          const expanded = input.expandDims(0);
-          const predictions = await model.predict(expanded);
-
-          // Get the canvas context
-          const ctx = canvasRef.current.getContext('2d');
-          ctx.clearRect(0, 0, videoWidth, videoHeight);
-
-          // Process predictions and draw bounding boxes on canvas
-          predictions.forEach((prediction) => {
-            const [x, y, width, height] = prediction.arraySync();
-            const label = prediction.class;
-            const score = prediction.score;
-
-            // Draw a red bounding box
-            ctx.strokeStyle = 'red';
-            ctx.lineWidth = 2;
-            ctx.fillStyle = 'red';
-            ctx.beginPath();
-            ctx.rect(x * videoWidth, y * videoHeight, width * videoWidth, height * videoHeight);
-            ctx.stroke();
-
-            // Display label and confidence score
-            ctx.fillStyle = 'red';
-            ctx.fillText(`${label} (${Math.round(score * 100)}%)`, x * videoWidth, y * videoHeight - 5);
-          });
-
-          tf.dispose([img, input, expanded, predictions]);
+        // Check if the video element has valid dimensions
+        if (videoElement.videoWidth === 0 || videoElement.videoHeight === 0) {
+          requestAnimationFrame(detectObjects);
+          return;
         }
-      }, 100);
+
+        // Capture a frame from the webcam
+        const imageSrc = webcam.getScreenshot();
+
+        // Create a canvas for rendering object detection results
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+
+        // Ensure the canvas is initialized
+        if (!canvas) {
+          requestAnimationFrame(detectObjects);
+          return;
+        }
+
+        // Resize the webcam frame to match the model's input size (256x256)
+        const desiredWidth = 256;
+        const desiredHeight = 256;
+        canvas.width = desiredWidth;
+        canvas.height = desiredHeight;
+        ctx.drawImage(videoElement, 0, 0, desiredWidth, desiredHeight);
+
+        // Convert the resized frame to a tensor and normalize pixel values
+        const inputTensor = tf.browser.fromPixels(canvas).toFloat().div(255.0).expandDims(0);
+
+        // Make predictions
+        const predictions = await model.predict(inputTensor).data();
+
+        // Define the class labels
+        const classLabels = ['buildings', 'forest', 'glacier', 'mountain', 'sea', 'street'];
+
+        // Find the index with the highest probability
+        const maxIndex = predictions.indexOf(Math.max(...predictions));
+
+        // Log the predicted class
+        const predictedClass = classLabels[maxIndex];
+        console.log('Predicted Class:', predictedClass);
+
+        // Draw a red bounding box around the predicted object
+        ctx.strokeStyle = 'red';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(0, 0, desiredWidth, desiredHeight);
+
+        // Customize the text appearance
+        ctx.fillStyle = 'red';
+        ctx.font = '18px Arial';
+
+        // Draw the predicted class label below the bounding box
+        ctx.fillText(predictedClass, 10, desiredHeight - 10);
+
+        // Request the next animation frame for real-time processing
+        requestAnimationFrame(detectObjects);
+      };
+
+      // Start real-time object detection
+      detectObjects();
     };
 
     runObjectDetection();
@@ -180,266 +94,31 @@ const ObjectDetection = () => {
     <div>
       <Webcam
         ref={webcamRef}
-        mirrored={true}
-        style={{ position: 'absolute', left: 0, top: 0 }}
+        style={{
+          position: "absolute",
+          left: 0,
+          right: 0,
+          top:100,
+          margin: "auto",
+          textAlign: "center",
+          zIndex: 9,
+          height: 480, // Adjust to your desired video dimensions
+          width: 640,  // Adjust to your desired video dimensions
+        }}
       />
       <canvas
         ref={canvasRef}
-        style={{ position: 'absolute', left: 0, top: 0 }}
-        width={640} // Set the canvas width to match the video dimensions
-        height={480} // Set the canvas height to match the video dimensions
-      />
-    </div>
-  );
-};
-
-export default ObjectDetection;
-
-
-
-
-
-
-
-
-import React, { useRef, useEffect } from 'react';
-import * as tf from '@tensorflow/tfjs';
-import Webcam from 'react-webcam';
-
-const ObjectDetection = () => {
-  const webcamRef = useRef(null);
-  const canvasRef = useRef(null);
-
-  useEffect(() => {
-    const runObjectDetection = async () => {
-      // Load your custom TensorFlow.js model
-      console.log('Creating custom model...');
-
-      const model = tf.sequential();
-
-      // Input Layer
-      model.add(tf.layers.inputLayer({ inputShape: [256, 256, 3] }));
-
-      // Convolutional Layer 1
-      model.add(tf.layers.conv2d({
-        filters: 32,
-        kernelSize: [3, 3],
-        activation: 'relu',
-        padding: 'valid',
-      }));
-
-      // MaxPooling Layer 1
-      model.add(tf.layers.maxPooling2d({
-        poolSize: [2, 2],
-        strides: [2, 2],
-        padding: 'valid',
-      }));
-
-      // Convolutional Layer 2
-      model.add(tf.layers.conv2d({
-        filters: 64,
-        kernelSize: [3, 3],
-        activation: 'relu',
-        padding: 'valid',
-      }));
-
-      // MaxPooling Layer 2
-      model.add(tf.layers.maxPooling2d({
-        poolSize: [2, 2],
-        strides: [2, 2],
-        padding: 'valid',
-      }));
-
-      // Convolutional Layer 3
-      model.add(tf.layers.conv2d({
-        filters: 128,
-        kernelSize: [3, 3],
-        activation: 'relu',
-        padding: 'valid',
-      }));
-
-      // MaxPooling Layer 3
-      model.add(tf.layers.maxPooling2d({
-        poolSize: [2, 2],
-        strides: [2, 2],
-        padding: 'valid',
-      }));
-
-      // Flatten Layer
-      model.add(tf.layers.flatten());
-
-      // Fully Connected Layer 1
-      model.add(tf.layers.dense({
-        units: 128,
-        activation: 'relu',
-      }));
-
-      // Fully Connected Layer 2
-      model.add(tf.layers.dense({
-        units: 64,
-        activation: 'relu',
-      }));
-
-      // Output Layer
-      model.add(tf.layers.dense({
-        units: 6, // Change this to match your number of classes
-        activation: 'softmax',
-      }));
-
-      console.log('Custom model created.');
-
-      // Compile the model with an appropriate loss and optimizer
-      model.compile({
-        loss: 'sparseCategoricalCrossentropy',
-        optimizer: tf.train.adam(0.001), // You can adjust the learning rate here
-        metrics: ['accuracy'],
-      });
-
-      console.log('Custom model compiled.');
-
-      setInterval(async () => {
-        if (webcamRef.current && webcamRef.current.video.readyState === 4) {
-          const video = webcamRef.current.video;
-          const { videoWidth, videoHeight } = video;
-          webcamRef.current.video.width = videoWidth;
-          webcamRef.current.video.height = videoHeight;
-
-          const img = tf.browser.fromPixels(video);
-          const input = tf.image.resizeBilinear(img, [256, 256]);
-          const expanded = input.expandDims(0);
-          const predictions = await model.predict(expanded);
-
-          // Get the canvas context
-          const ctx = canvasRef.current.getContext('2d');
-          ctx.clearRect(0, 0, videoWidth, videoHeight);
-
-          // Process predictions and draw bounding boxes on canvas
-          predictions.forEach((prediction) => {
-            const [x, y, width, height] = prediction.arraySync();
-            const label = prediction.class;
-            const score = prediction.score;
-
-            // Draw a red bounding box
-            ctx.strokeStyle = 'red';
-            ctx.lineWidth = 2;
-            ctx.fillStyle = 'red';
-            ctx.beginPath();
-            ctx.rect(x * videoWidth, y * videoHeight, width * videoWidth, height * videoHeight);
-            ctx.stroke();
-
-            // Display label and confidence score
-            ctx.fillStyle = 'red';
-            ctx.fillText(`${label} (${Math.round(score * 100)}%)`, x * videoWidth, y * videoHeight - 5);
-          });
-
-          tf.dispose([img, input, expanded, predictions]);
-        }
-      }, 100);
-    };
-
-    runObjectDetection();
-  }, []);
-
-  return (
-    <div>
-      <Webcam
-        ref={webcamRef}
-        mirrored={true}
-        style={{ position: 'absolute', left: 0, top: 0 }}
-      />
-      <canvas
-        ref={canvasRef}
-        style={{ position: 'absolute', left: 0, top: 0 }}
-        width={256} // Set the canvas width to match the video dimensions
-        height={256} // Set the canvas height to match the video dimensions
-      />
-    </div>
-  );
-};
-
-export default ObjectDetection;
-import React, { useRef, useEffect } from 'react';
-import * as tf from '@tensorflow/tfjs';
-import Webcam from 'react-webcam';
-
-const ObjectDetection = () => {
-  const webcamRef = useRef(null);
-  const canvasRef = useRef(null);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    const runObjectDetection = async () => {
-      try {
-        // Load your pre-trained TensorFlow.js model from local storage
-        console.log('Loading pre-trained model...');
-        const model = await tf.loadLayersModel('https://raw.githubusercontent.com/VarunCypherV/ObjectDetectionReactApp/main/model.json');
-        console.log('Pre-trained model loaded.');
-        
-        while (isMounted) {
-          if (webcamRef.current && webcamRef.current.video.readyState === 4) {
-            const video = webcamRef.current.video;
-            const { videoWidth, videoHeight } = video;
-
-            // Set canvas dimensions to match the video
-            canvasRef.current.width = videoWidth;
-            canvasRef.current.height = videoHeight;
-
-            const img = tf.browser.fromPixels(video);
-            const input = tf.image.resizeBilinear(img, [256, 256]);
-            const expanded = input.expandDims(0);
-            const predictions = await model.predict(expanded);
-
-            // Get the canvas context
-            const ctx = canvasRef.current.getContext('2d');
-            ctx.clearRect(0, 0, videoWidth, videoHeight);
-
-            // Process predictions and draw bounding boxes on canvas
-            predictions.arraySync().forEach((prediction) => {
-              const [x, y, width, height] = prediction;
-              const label = 'Object'; // Replace with your class labels
-              const score = 0.8; // Replace with the actual confidence score
-
-              // Draw a red bounding box
-              ctx.strokeStyle = 'red';
-              ctx.lineWidth = 2;
-              ctx.fillStyle = 'red';
-              ctx.beginPath();
-              ctx.rect(x * videoWidth, y * videoHeight, width * videoWidth, height * videoHeight);
-              ctx.stroke();
-
-              // Display label and confidence score
-              ctx.fillStyle = 'red';
-              ctx.fillText(`${label} (${Math.round(score * 100)}%)`, x * videoWidth, y * videoHeight - 5);
-            });
-
-            // Dispose of TensorFlow.js tensors
-            tf.dispose([img, input, expanded, predictions]);
-          }
-        }
-      } catch (error) {
-        console.error('Error loading the model:', error);
-        // Handle the error (e.g., display an error message to the user)
-      }
-    };
-
-    runObjectDetection();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  return (
-    <div>
-      <Webcam
-        ref={webcamRef}
-        mirrored={true}
-        style={{ position: 'absolute', left: 0, top: 0 }}
-      />
-      <canvas
-        ref={canvasRef}
-        style={{ position: 'absolute', left: 0, top: 0 }}
+        style={{
+          position: "absolute",
+          left: 0,
+          right: 0,
+          top:100,
+          margin: "auto",
+          textAlign: "center",
+          zIndex: 9,
+          height: 480, // Adjust to your desired video dimensions
+          width: 640,  // Adjust to your desired video dimensions // Hide the canvas since we use it for processing only
+        }}
       />
     </div>
   );

@@ -10,16 +10,16 @@ const ObjectDetection = () => {
     const runObjectDetection = async () => {
       // Load your custom TensorFlow.js model
       console.log('Custom model going to load.');
-      const model = await tf.loadLayersModel('https://raw.githubusercontent.com/VarunCypherV/ObjectDetectionReactApp/main/model.json');
+      const model = await tf.loadLayersModel('https://raw.githubusercontent.com/VarunCypherV/LivePreviewObjectDetectionReactApp/main/model/waste/model.json');
       console.log('Custom model loaded.');
-
+      //
+      //https://raw.githubusercontent.com/VarunCypherV/ObjectDetectionReactApp/main/model.json
       // Create a function for real-time object detection
       const detectObjects = async () => {
         const webcam = webcamRef.current;
 
         // Ensure the webcam is initialized
         if (!webcam || !webcam.video) {
-          requestAnimationFrame(detectObjects);
           return;
         }
 
@@ -27,7 +27,6 @@ const ObjectDetection = () => {
 
         // Check if the video element has valid dimensions
         if (videoElement.videoWidth === 0 || videoElement.videoHeight === 0) {
-          requestAnimationFrame(detectObjects);
           return;
         }
 
@@ -40,7 +39,6 @@ const ObjectDetection = () => {
 
         // Ensure the canvas is initialized
         if (!canvas) {
-          requestAnimationFrame(detectObjects);
           return;
         }
 
@@ -58,20 +56,31 @@ const ObjectDetection = () => {
         const predictions = await model.predict(inputTensor).data();
 
         // Define the class labels
-        const classLabels = ['buildings', 'forest', 'glacier', 'mountain', 'sea', 'street'];
-
+        // const classLabels = ['buildings', 'forest', 'glacier', 'mountain', 'sea', 'street'];
+        const classLabels = ['organic','recycle'];
         // Find the index with the highest probability
         const maxIndex = predictions.indexOf(Math.max(...predictions));
 
         // Log the predicted class
-        console.log('Predicted Class:', classLabels[maxIndex]);
+        const predictedClass = classLabels[maxIndex];
+        console.log('Predicted Class:', predictedClass);
 
-        // Request the next animation frame for real-time processing
-        requestAnimationFrame(detectObjects);
+        // Draw a red bounding box around the predicted object
+        ctx.strokeStyle = 'red';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(0, 0, desiredWidth, desiredHeight);
+
+        // Customize the text appearance
+        ctx.fillStyle = 'red';
+        ctx.font = '18px Arial';
+
+        // Draw the predicted class label below the bounding box
+        ctx.fillText(predictedClass, 10, desiredHeight - 10);
       };
 
-      // Start real-time object detection
-      detectObjects();
+      // Request frames for real-time processing every 100 ms
+      const frameInterval = 100;
+      setInterval(detectObjects, frameInterval);
     };
 
     runObjectDetection();
@@ -85,6 +94,7 @@ const ObjectDetection = () => {
           position: "absolute",
           left: 0,
           right: 0,
+          top:100,
           margin: "auto",
           textAlign: "center",
           zIndex: 9,
@@ -95,7 +105,16 @@ const ObjectDetection = () => {
       <canvas
         ref={canvasRef}
         style={{
-          display: "none", // Hide the canvas since we use it for processing only
+          position: "absolute",
+          left: 0,
+          right: 0,
+          top:100,
+          margin: "auto",
+          textAlign: "center",
+          zIndex: 9,
+          height: 480, // Adjust to your desired video dimensions
+          width: 640,  // Adjust to your desired video dimensions
+          display: 'none', // Hide the canvas since we use it for processing only
         }}
       />
     </div>
